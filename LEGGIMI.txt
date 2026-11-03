@@ -1,0 +1,27 @@
+FORGE WEB — l'app Forge per iPhone (funziona anche su Android e computer)
+=========================================================================
+
+COME METTERLA ONLINE (una volta sola, 5 minuti, gratis) con GitHub Pages
+1. Entra su github.com con il tuo account.
+2. In alto a destra "+" > "New repository". Nome: forge. Lascialo "Public". Crea.
+3. Nella pagina del repository tocca "uploading an existing file"
+   (oppure "Add file" > "Upload files").
+4. Trascina TUTTI i file di questo zip (compresa la cartella fonts) e premi "Commit changes".
+5. Vai su Settings > Pages. In "Branch" scegli "main" e cartella "/ (root)", poi Save.
+6. Dopo 1-2 minuti l'app e' su:  https://TUONOME.github.io/forge/
+   (TUONOME = il tuo nome utente GitHub)
+
+SULL'IPHONE DEL TUO AMICO
+1. Apri il link con SAFARI.
+2. Tocca Condividi (quadrato con freccia in su) > "Aggiungi alla schermata Home" > Aggiungi.
+3. Da quel momento si apre dall'icona Forge, a schermo intero, anche senza internet.
+
+AGGIORNAMENTI
+Ricarica su GitHub i file nuovi (sovrascrivendo). Quando l'app e' aperta con internet
+prende da sola la versione nuova (al massimo chiudila e riaprila).
+
+DA SAPERE
+- I dati restano sul telefono. Ogni tanto: Altro > Backup e ripristino > Salva in un file.
+- Il backup e' compatibile con Forge Android (si puo' passare da uno all'altro).
+- Su iPhone il timer suona solo con l'app aperta; durante l'allenamento lo schermo resta acceso.
+- Le schede di Claude si importano come su Android: Scheda > Importa > Incolla.
