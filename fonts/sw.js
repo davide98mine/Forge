@@ -1,6 +1,6 @@
 /* Forge Web — funziona anche senza internet. Cambia VERSION a ogni aggiornamento. */
-const VERSION = 'forge-1.0.1';
-const FILES = ['./', 'index.html', 'style.css?v=2', 'logic.js?v=2', 'ui.js?v=2', 'screens.js?v=2', 'manifest.webmanifest',
+const VERSION = 'forge-1.0.2';
+const FILES = ['./', 'index.html', 'style.css?v=3', 'logic.js?v=3', 'ui.js?v=3', 'screens.js?v=3', 'manifest.webmanifest',
   'icon-192.png', 'icon-512.png', 'apple-touch-icon.png',
   'fonts/barlow_cond_bold.ttf', 'fonts/inter_regular.ttf', 'fonts/inter_semibold.ttf', 'fonts/spacegrotesk_medium.ttf', 'fonts/spacegrotesk_bold.ttf',
   'fonts/plexsans_regular.ttf', 'fonts/plexsans_semibold.ttf', 'fonts/plexsans_bold.ttf', 'fonts/plexmono_bold.ttf',

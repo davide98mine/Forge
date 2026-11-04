@@ -8,6 +8,7 @@ const THEMES = {
   D: { name: 'Gesso', desc: 'Chiaro e morbido, angoli arrotondati e colori pastello.', bg: '#F3F1EC', surface: '#FFFFFF', surface2: '#EEF0FF', line: '#E6E1D7', text: '#1C1B22', muted: '#66626F', faint: '#A9A5B5', accent: '#4338CA', onAccent: '#FFFFFF', primary: '#4338CA', onPrimary: '#FFFFFF', navBg: '#1C1B22', r: 24 }
 };
 const ap = (el, ...k) => add(el, k);
+const nn = (n, one, many) => n + ' ' + (n === 1 ? one : many);
 const dateLong = () => new Date().toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' });
 const hhmm = ts => new Date(ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
@@ -74,10 +75,15 @@ class TodayScreen {
     if (rep >= 0 && !live) {
       b.appendChild(h('div', { class: 'card', style: 'background:var(--warnBg);border:0' },
         h('div', { class: 'bold', style: 'color:var(--warn);font-size:16px' }, 'Settimana ' + (rep + 1) + " fatta a meta'"),
-        txt('small', 'Hai fatto ' + F.doneInWeek(D, p, rep) + ' allenamenti su ' + p.weeks[rep].days.length + '. Per non saltare la progressione puoi ripeterla prima di passare alla settimana ' + (rep + 2) + '.'),
+        txt('small', 'Hai fatto ' + nn(F.doneInWeek(D, p, rep), 'allenamento', 'allenamenti') + ' su ' + p.weeks[rep].days.length + '. Per non saltare la progressione puoi ripeterla prima di passare alla settimana ' + (rep + 2) + '.'),
         btn('Ripeti settimana ' + (rep + 1), 'warn', () => confirmBox('Ripetere la settimana ' + (rep + 1) + '?', "Gli allenamenti gia' fatti restano nello storico, ma la scheda ripartira' dal giorno 1 della settimana " + (rep + 1) + '.', 'Ripeti', () => { F.repeatWeek(D, p, rep); save(); App.refresh(); }))));
     }
-    b.appendChild(h('div', { class: 'row' }, progress(0), txt('tiny bold', '0 / ' + day.exs.length + ' esercizi')));
+    let exDone = 0;
+    if (live && live.program === p.id && live.week === n[0] && live.day === n[1]) {
+      const ll = F.logsOf(D, live.id);
+      day.exs.forEach((x, k) => { if (ll.filter(l => !l.warmup && l.exIdx === k).length >= F.totalSets(x)) exDone++; });
+    }
+    b.appendChild(h('div', { class: 'row' }, progress(exDone / Math.max(1, day.exs.length)), txt('tiny bold', exDone + ' / ' + day.exs.length + ' esercizi')));
     const c = card(h('div', { class: 'row' }, h('div', { class: 'h2 grow' }, 'Cosa ti aspetta'), wk.deload ? tag('Scarico', 'warn') : null,
       ibtn('book', "Anteprima completa dell'allenamento", () => App.show(new DayScreen(p.id, n[0], n[1])), 'alt')));
     if (wk.note) c.appendChild(txt('small', wk.note));
@@ -163,7 +169,7 @@ class WorkoutScreen {
     const cur = this.firstOpen(day, logs);
     if (this.focus < 0 || this.focus >= day.exs.length) this.focus = cur[0] >= 0 ? cur[0] : day.exs.length - 1;
     const fi = this.focus, e = day.exs[fi];
-    const over = dateLong() + ' · Settimana ' + (s.week + 1) + ' di ' + p.weeks.length + (p.weeks[s.week].deload ? ' · scarico' : '');
+    const over = 'Sett. ' + (s.week + 1) + ' di ' + p.weeks.length + (p.weeks[s.week].deload ? ' · scarico' : '') + ' · ' + dateLong();
     const b = page(this, 'Giorno ' + (s.day + 1) + ' · ' + day.name, over, [
       ibtn('note', "Note dell'allenamento", () => promptBox("Note dell'allenamento", 'come ti senti, cosa cambiare…', s.note, v => { s.note = v; save(); }, true)),
       ibtn('more', 'Altre azioni', () => this.menu(s, day, e))]);
@@ -325,7 +331,7 @@ class WorkoutScreen {
     const rpe = this.draftRpe(i, k);
     const g = F.groupOf(e, k), proposed = current && drafts[this.key(i, k) + ':kg'] == null && !(g.kg > 0) && this.draftKg(e, i, k) > 0;
     ap(r, h('div', { class: 'grow', style: current ? 'font-weight:700' : 'color:var(--faint)' }, this.label(e, i, k),
-      proposed ? h('div', { class: 'tiny', style: 'font-weight:400' }, 'peso consigliato: tocca per cambiarlo') : null),
+      proposed ? h('div', { class: 'tiny', style: 'font-weight:400' }, 'consigliato · tocca per cambiarlo') : null),
       txt('tiny', current ? (rpe > 0 ? 'RPE ' + F.kg(rpe) : 'RPE —') : ''),
       this.check(current ? 1 : 0, () => { const s = this.session(); const p = F.program(D, s.program); this.complete(s, F.day(p, s.week, s.day), i, k); }));
     r.classList.add('tap');
@@ -500,13 +506,13 @@ class ProgramScreen {
     if (this.week < 0 || this.week >= p.weeks.length) this.week = n ? n[0] : p.weeks.length - 1;
     const starts = D.sessions.filter(s => s.program === p.id).map(s => s.start);
     const dpw = F.daysPerWeek(p);
-    b.appendChild(txt('small', dpw + (dpw === 1 ? ' giorno' : ' giorni') + ' a settimana · ' + (starts.length ? 'iniziata il ' + new Date(Math.min.apply(null, starts)).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) : p.weeks.length + ' settimane, non ancora iniziata')));
+    b.appendChild(txt('small', dpw + (dpw === 1 ? ' giorno' : ' giorni') + ' a settimana · ' + (starts.length ? 'iniziata il ' + new Date(Math.min.apply(null, starts)).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) : nn(p.weeks.length, 'settimana', 'settimane') + ', non ancora iniziata')));
     if (p.desc) b.appendChild(txt('tiny faint', p.desc));
     b.appendChild(h('div', { class: 'row' }, btn('Importa scheda', 'outline', () => App.show(new ImportScreen('')), 'import'), btn('Esporta', 'secondary', () => this.exportMenu(p), 'export')));
     const wrow = h('div', { class: 'hscroll' });
     p.weeks.forEach((w, i) => {
       const done = F.doneInWeek(D, p, i), complete = done >= w.days.length && w.days.length > 0, sel = i === this.week, now = n && n[0] === i;
-      wrow.appendChild(h('button', { class: 'wchip' + (sel ? ' sel' : complete ? ' done' : w.deload ? ' deload' : ''), style: p.weeks.length > 6 ? 'flex:none;width:52px' : '', 'aria-label': 'Settimana ' + (i + 1), onclick: () => { this.week = i; App.refresh(); } },
+      wrow.appendChild(h('button', { class: 'wchip' + (sel ? ' sel' : complete ? ' done' : w.deload ? ' deload' : ''), style: p.weeks.length > 6 ? 'flex:none;width:52px' : p.weeks.length < 4 ? 'flex:none;width:64px' : '', 'aria-label': 'Settimana ' + (i + 1), onclick: () => { this.week = i; App.refresh(); } },
         h('div', { class: 'num', style: 'font-size:17px' }, 'S' + (i + 1)), complete ? icon('check') : h('div', { class: 's' }, now ? 'ORA' : w.deload ? 'SCAR.' : '')));
     });
     b.appendChild(wrow);
@@ -546,10 +552,11 @@ class ProgramScreen {
     let to = Math.min(p.weeks.length - 1, Math.max(0, this.week - 1) + 3), from = Math.max(0, to - 3);
     for (let wi = from; wi <= to; wi++) {
       const w = p.weeks[wi];
-      let g = null;
-      for (const dd of w.days) { const e = dd.exs.find(x => F.same(x.name, ex) && x.groups.length); if (e) { g = e.groups[0]; break; } }
+      let g = null, ge = null;
+      for (const dd of w.days) { const e = dd.exs.find(x => F.same(x.name, ex) && x.groups.length); if (e) { g = e.groups[0]; ge = e; break; } }
       if (!g) continue;
-      const kg = g.kg > 0 ? F.kg(g.kg) : g.pct > 0 && max > 0 ? F.kg(F.round(max * g.pct / 100, D.settings.step)) : '—';
+      const sg = F.suggest(D, ex, g, null, ge);
+      const kg = g.kg > 0 ? F.kg(g.kg) : g.pct > 0 && max > 0 ? F.kg(F.round(max * g.pct / 100, D.settings.step)) : sg.kg > 0 ? '~' + F.kg(sg.kg) : '—';
       const hl = wi === this.week;
       c.appendChild(h('div', { class: 'tr' + (hl ? ' hl' : '') }, h('span', { class: 'num', style: hl ? 'color:var(--accentText)' : '' }, 'S' + (wi + 1)),
         h('span', { style: hl ? 'font-weight:700' : '' }, g.sets + ' × ' + (g.reps || g.sec + 's') + (w.deload ? '  scarico' : '')),
@@ -599,7 +606,7 @@ class ProgramsScreen {
       const on = act && act.id === p.id;
       const done = D.sessions.filter(s => s.program === p.id && s.done && !s.ignored).length;
       const c = card(h('div', { class: 'row' }, h('div', { class: 'grow' }, on ? txt('tiny bold accent', 'ATTIVA') : null, txt('h2', p.name),
-        txt('tiny', p.weeks.length + ' sett. · ' + F.daysPerWeek(p) + ' giorni · ' + done + '/' + F.totalDays(p) + ' fatti · ' + (p.source === 'importata' ? 'importata' : 'creata a mano'))),
+        txt('tiny', p.weeks.length + ' sett. · ' + nn(F.daysPerWeek(p), 'giorno', 'giorni') + ' · ' + done + '/' + F.totalDays(p) + ' fatti · ' + (p.source === 'importata' ? 'importata' : 'creata a mano'))),
         ibtn('more', 'Opzioni scheda', () => this.menu(p), 'alt')));
       if (on) c.style.borderColor = 'var(--accent)';
       else c.appendChild(btn('Rendi attiva', 'secondary', () => { D.activeId = p.id; save(); App.home(1); }));
@@ -741,7 +748,7 @@ class ProgressionScreen {
       b.appendChild(txt('small', 'Scegli un esercizio per vedere e modificare come cambia di settimana in settimana.'));
       const seen = new Map();
       p.weeks.forEach(w => w.days.forEach(dd => dd.exs.forEach(e => seen.set(e.name, (seen.get(e.name) || 0) + 1))));
-      seen.forEach((c, name) => { const mx = F.currentMax(D, name); b.appendChild(item(null, name, c + ' volte nella scheda' + (mx > 0 ? ' · 1RM ' + F.kg(mx) + ' kg' : ''), () => App.show(new ProgressionScreen(this.pid, name)))); });
+      seen.forEach((c, name) => { const mx = F.currentMax(D, name); b.appendChild(item(null, name, nn(c, 'volta', 'volte') + ' nella scheda' + (mx > 0 ? ' · 1RM ' + F.kg(mx) + ' kg' : ''), () => App.show(new ProgressionScreen(this.pid, name)))); });
       return b;
     }
     const max = F.currentMax(D, this.ex), nx = F.next(D, p);
@@ -829,7 +836,7 @@ class ImportScreen {
     if (res.exercisesOnly) {
       b.appendChild(card(txt('h2', res.newExercises.length + (res.newExercises.length === 1 ? ' esercizio' : ' esercizi')), res.newExercises.map(e => h('div', null, txt('bold', e.name), txt('tiny', e.group + (e.equip ? ' · ' + e.equip : '') + (e.note ? ' · ' + e.note : ''))))));
       this.warnings(b);
-      b.appendChild(btn('Aggiungi alla libreria', 'primary', () => { const n = this.addExercises(); save(); toast(n + ' esercizi aggiunti o aggiornati'); App.closeAndHome(3); }));
+      b.appendChild(btn('Aggiungi alla libreria', 'primary', () => { const n = this.addExercises(); save(); toast(nn(n, 'esercizio aggiunto o aggiornato', 'esercizi aggiunti o aggiornati')); App.closeAndHome(3); }));
       b.appendChild(btn('Annulla', 'secondary', () => App.back()));
       return b;
     }
@@ -1149,7 +1156,7 @@ class BackupScreen {
   render() {
     const b = page(this, 'Backup e ripristino', 'Nessun account, nessun cloud');
     b.appendChild(txt('small', 'Tutti i dati stanno solo su questo telefono. Con il backup li salvi in un file (File, iCloud Drive, Drive, WhatsApp…). Il backup e\' compatibile con Forge per Android.'));
-    b.appendChild(card(txt('h2', 'Salva backup'), txt('tiny', D.programs.length + ' schede · ' + D.sessions.length + ' allenamenti · ' + D.logs.length + ' serie · ' + D.maxes.length + ' massimali'),
+    b.appendChild(card(txt('h2', 'Salva backup'), txt('tiny', nn(D.programs.length, 'scheda', 'schede') + ' · ' + nn(D.sessions.length, 'allenamento', 'allenamenti') + ' · ' + D.logs.length + ' serie · ' + nn(D.maxes.length, 'massimale', 'massimali')),
       btn('Salva in un file', 'primary', () => saveFile('forge_backup_' + new Date().toISOString().slice(0, 10) + '.json', 'application/json', JSON.stringify(F.dataToJson(D))))));
     b.appendChild(card(txt('h2', 'Ripristina'), h('div', { class: 'small', style: 'color:var(--warn)' }, 'Attenzione: il ripristino sostituisce tutti i dati attuali con quelli del file.'),
       btn('Scegli il file di backup', 'secondary', () => openFile(text => {
@@ -1367,7 +1374,7 @@ function editExercise(src, after) {
 }
 
 // ============================================================ AVVIO
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 function boot() {
   loadData();
   document.documentElement.dataset.theme = D.settings.theme;
