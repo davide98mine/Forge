@@ -216,12 +216,27 @@
     return d.logs.filter(l => !l.warmup && F.same(l.ex, ex) && l.session === last);
   };
 
-  F.suggest = function (d, ex, g, excludeSession) {
+  /** Serie [da, a) occupate dalla riga di serie g dentro l'esercizio e (null se g non e' di e). */
+  F.groupRange = function (e, g) {
+    if (!e || !g) return null;
+    let c = 0;
+    for (const x of e.groups) { const n = Math.max(1, x.sets); if (x === g) return [c, c + n]; c += n; }
+    return null;
+  };
+  /** Ultime serie della stessa riga (es. solo il top set, oppure solo i back off): mai mischiate. */
+  F.lastLogsFor = function (d, e, g, excludeSession) {
+    const all = F.lastLogs(d, e.name, excludeSession);
+    const r = F.groupRange(e, g);
+    if (!r || !all.length) return all;
+    if (e.groups.length === 1) return all.filter(l => l.setIdx >= r[0]);
+    return all.filter(l => l.setIdx >= r[0] && l.setIdx < r[1]);
+  };
+  F.suggest = function (d, ex, g, excludeSession, exObj) {
     const s = d.settings;
     const sg = { kg: 0, base: 0, reason: '', last: '', delta: 0 };
     const max = F.currentMax(d, ex);
     const reps = F.repsLow(g.reps);
-    const last = F.lastLogs(d, ex, excludeSession);
+    const last = exObj && F.same(exObj.name, ex) ? F.lastLogsFor(d, exObj, g, excludeSession) : F.lastLogs(d, ex, excludeSession);
     let source;
     const recentE1 = F.bestE1rm(d, ex, 90, excludeSession);
     if (g.kg > 0) { sg.base = g.kg; source = 'kg'; sg.reason = 'peso indicato nella scheda'; }
@@ -337,6 +352,15 @@
     const prev = next[0] - 1, total = p.weeks[prev].days.length;
     if (!total) return -1;
     return F.doneInWeek(d, p, prev) / total < 0.6 ? prev : -1;
+  };
+  F.remap = (old, from, to) => old === from ? to : (from < to && old > from && old <= to) ? old - 1 : (from > to && old >= to && old < from) ? old + 1 : old;
+  /** Sposta un esercizio nel giorno e riallinea le serie gia' registrate di quel giorno. */
+  F.moveExercise = function (d, p, w, day, from, to) {
+    const dd = F.day(p, w, day);
+    if (!dd || from === to || from < 0 || to < 0 || from >= dd.exs.length || to >= dd.exs.length) return;
+    dd.exs.splice(to, 0, dd.exs.splice(from, 1)[0]);
+    const ses = new Set(d.sessions.filter(s => s.program === p.id && s.week === w && s.day === day).map(s => s.id));
+    d.logs.forEach(l => { if (ses.has(l.session)) l.exIdx = F.remap(l.exIdx, from, to); });
   };
   F.repeatWeek = (d, p, w) => d.sessions.forEach(s => { if (s.program === p.id && s.week >= w) s.ignored = true; });
 

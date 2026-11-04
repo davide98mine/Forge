@@ -290,9 +290,71 @@ function page(screen, title, over, actions) {
   const head = h('div', { class: 'head' });
   if (!screen.root) head.appendChild(ibtn('back', 'Indietro', () => App.back()));
   head.appendChild(h('div', { class: 'titles' }, over ? txt('over', over) : null, title ? h('h1', { class: 'h1' }, title) : null));
-  (actions || []).forEach(a => a && head.appendChild(a));
+  const acts = (actions || []).filter(Boolean);
+  acts.forEach(a => head.appendChild(a));
+  if (title && title.length > 14 && acts.length + (screen.root ? 0 : 1) >= 2) head.classList.add('acts2');
   body.appendChild(head);
   return body;
 }
 
 window.addEventListener('popstate', () => { App.back(); history.pushState(null, ''); });
+
+/* Tieni premuto un elemento di "box" e trascinalo sopra o sotto gli altri. Il tocco breve resta un click. */
+function makeReorder(box, onMove) {
+  const items = () => Array.from(box.children);
+  items().forEach(item => {
+    item.classList.add('reorder');
+    let timer = null, drag = false, moved = false, sx = 0, sy = 0, lastY = 0, startScroll = 0, from = -1, to = -1, raf = 0;
+    const scroller = document.scrollingElement || document.documentElement;
+    const follow = () => {
+      const dy = lastY - sy + (scroller.scrollTop - startScroll);
+      item.style.transform = 'translateY(' + dy + 'px) scale(1.03)';
+      const list = items(), r0 = item.offsetTop + dy + item.offsetHeight / 2;
+      to = from;
+      for (let i = 0; i < from; i++) { const c = list[i]; if (r0 < c.offsetTop + c.offsetHeight / 2) { to = i; break; } }
+      if (to === from) for (let i = list.length - 1; i > from; i--) { const c = list[i]; if (r0 > c.offsetTop + c.offsetHeight / 2) { to = i; break; } }
+      const gap = list.length > 1 ? Math.max(0, (list[1].offsetTop - list[0].offsetTop - list[0].offsetHeight)) : 0, shift = item.offsetHeight + gap;
+      list.forEach((c, i) => {
+        if (i === from) return;
+        let ty = 0;
+        if (from < to && i > from && i <= to) ty = -shift; else if (from > to && i >= to && i < from) ty = shift;
+        c.style.transform = ty ? 'translateY(' + ty + 'px)' : '';
+      });
+    };
+    const loop = () => {
+      if (!drag) return;
+      const edge = 80, H = window.innerHeight;
+      if (lastY < edge) { scroller.scrollTop -= 12; follow(); } else if (lastY > H - edge - 70) { scroller.scrollTop += 12; follow(); }
+      raf = requestAnimationFrame(loop);
+    };
+    const end = (cancel) => {
+      clearTimeout(timer); timer = null;
+      if (!drag) return;
+      drag = false; cancelAnimationFrame(raf);
+      document.body.classList.remove('dragging');
+      items().forEach(c => { c.style.transform = ''; c.classList.remove('drag'); });
+      if (!cancel && from >= 0 && to >= 0 && from !== to) onMove(from, to);
+    };
+    item.addEventListener('pointerdown', e => {
+      if (e.button > 0 || e.target.closest('button,input,textarea')) return;
+      sx = e.clientX; sy = e.clientY; lastY = sy; moved = false;
+      timer = setTimeout(() => {
+        timer = null; drag = true; moved = true; from = items().indexOf(item); to = from; startScroll = scroller.scrollTop;
+        item.classList.add('drag'); document.body.classList.add('dragging');
+        if (navigator.vibrate) try { navigator.vibrate(15); } catch (er) {}
+        follow(); raf = requestAnimationFrame(loop);
+      }, 450);
+    });
+    item.addEventListener('pointermove', e => {
+      lastY = e.clientY;
+      if (drag) { follow(); return; }
+      if (timer && (Math.abs(e.clientY - sy) > 8 || Math.abs(e.clientX - sx) > 8)) { clearTimeout(timer); timer = null; }
+    });
+    item.addEventListener('pointerup', () => end(false));
+    item.addEventListener('pointercancel', () => end(false));
+    // mentre si trascina la pagina non deve scorrere col dito (iPhone)
+    item.addEventListener('touchmove', e => { if (drag) e.preventDefault(); }, { passive: false });
+    item.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+    item.addEventListener('contextmenu', e => e.preventDefault());
+  });
+}

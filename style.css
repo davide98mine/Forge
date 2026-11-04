@@ -179,6 +179,9 @@ input, textarea, select { font: inherit; color: var(--text); }
 .tr { display: grid; grid-template-columns: 0.8fr 2fr 0.9fr 1.1fr; gap: 6px; padding: 9px 14px; align-items: center; border-top: 1px solid var(--line); font-size: 14px; }
 .tr.h { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-top: 0; }
 .tr.hl { background: var(--goodBg); }
+.tr.tap.hl { background: var(--surface2); }
+.titles .over { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head.acts2 .h1 { font-size: calc(var(--h1) * .8); }
 .tr .r { text-align: right; }
 
 /* calendario */
@@ -212,3 +215,7 @@ input, textarea, select { font: inherit; color: var(--text); }
 .theme-card svg { width: 100%; height: auto; display: block; }
 pre.guide { white-space: pre-wrap; font-size: 11px; color: var(--muted); margin: 0; font-family: ui-monospace, Menlo, monospace; }
 svg.chart { width: 100%; height: 150px; display: block; touch-action: pan-y; }
+.reorder { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; transition: transform .12s ease; }
+.reorder.drag { transition: none; position: relative; z-index: 30; box-shadow: 0 12px 30px rgba(0,0,0,.35); opacity: .96; }
+body.dragging { touch-action: none; }
+.hint { font-size: 12px; color: var(--faint); }
