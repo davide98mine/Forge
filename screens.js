@@ -359,8 +359,12 @@ class WorkoutScreen {
     const done = this.logFor(logs, i, k, false);
     const r = h('div', { class: 'setrow' + (current ? ' cur' : '') });
     r.appendChild(h('span', { class: 'n', style: 'color:' + (current ? 'var(--accentText)' : done ? 'var(--muted)' : 'var(--faint)') }, String(k + 1)));
+    const prev = F.prevSet(D, e.name, k, this.sid);
     if (done) {
-      ap(r, h('div', { class: 'grow' }, done.sec > 0 && done.reps === 0 ? done.sec + ' s' + (done.kg > 0 ? ' · ' + F.kg(done.kg) + ' kg' : '') : F.kg(done.kg) + ' kg × ' + done.reps),
+      const cmp = F.compareSet(done, prev, D.settings.formula);
+      const col = cmp ? (cmp.dir > 0 ? 'var(--accentText)' : cmp.dir < 0 ? 'var(--warn)' : 'var(--muted)') : '';
+      ap(r, h('div', { class: 'grow' }, F.setText(done),
+          cmp ? h('div', { class: 'tiny', style: 'font-weight:600;color:' + col }, (cmp.dir > 0 ? '↑ ' : cmp.dir < 0 ? '↓ ' : '= ') + cmp.text + ' (prima ' + F.setText(prev) + ')') : null),
         txt('tiny', done.rpe > 0 ? 'RPE ' + F.kg(done.rpe) : ''), done.pr ? h('span', { style: 'width:18px;height:18px;display:flex;color:var(--record)' }, icon('trophy')) : null,
         this.check(2, () => confirmBox('Annullare la serie ' + (k + 1) + '?', "La serie tornera' da fare.", 'Annulla serie', () => { D.logs.splice(D.logs.indexOf(done), 1); save(); App.refresh(); })));
       r.classList.add('tap');
@@ -370,8 +374,9 @@ class WorkoutScreen {
     }
     const rpe = this.draftRpe(i, k);
     const g = F.groupOf(e, k), proposed = current && drafts[this.key(i, k) + ':kg'] == null && !(g.kg > 0) && this.draftKg(e, i, k) > 0;
+    const sub = [proposed ? 'consigliato' : '', prev ? 'volta scorsa ' + F.setText(prev) : ''].filter(Boolean).join(' · ');
     ap(r, h('div', { class: 'grow', style: current ? 'font-weight:700' : 'color:var(--faint)' }, this.label(e, i, k),
-      proposed ? h('div', { class: 'tiny', style: 'font-weight:400' }, 'consigliato · tocca per cambiarlo') : null),
+      sub ? h('div', { class: 'tiny', style: 'font-weight:400' + (current ? '' : ';color:var(--faint)') }, sub) : null),
       txt('tiny', current ? (rpe > 0 ? 'RPE ' + F.kg(rpe) : 'RPE —') : ''),
       this.check(current ? 1 : 0, () => { const s = this.session(); const p = F.program(D, s.program); this.complete(s, F.day(p, s.week, s.day), i, k); }));
     r.classList.add('tap');
@@ -732,6 +737,8 @@ class DayScreen {
         this.edit ? ibtn('trash', 'Elimina serie', () => { if (e.groups.length <= 1) { toast('Un esercizio deve avere almeno una riga di serie'); return; } e.groups.splice(k, 1); save(); App.refresh(); }, 'alt') : null));
     });
     c.appendChild(hscroll(tag('Recupero ' + F.time(F.restFor(D.settings, e, e.groups[0]))), e.tempo ? tag('Tempo ' + e.tempo) : null));
+    const last = F.lastLogs(D, e.name, D.liveSession || null).sort((a, b) => a.setIdx - b.setIdx);
+    if (last.length) c.appendChild(h('div', { class: 'small' }, h('b', null, 'Ultima volta (' + F.dm(last[0].ts) + '): '), last.map(F.setText).join(' · ')));
     if (e.note) c.appendChild(txt('small', e.note));
     if (e.approach.length || e.approachNote) c.appendChild(h('div', { class: 'tiny accent' }, 'Avvicinamento: ' + (e.approach.length ? e.approach.map(x => F.kg(x[0]) + '% × ' + x[1]).join(', ') + '. ' : '') + e.approachNote));
     if (this.edit) c.appendChild(h('button', { class: 'btn ghost', style: 'color:var(--accentText);justify-content:flex-start', onclick: () => editGroup(e.name, null, ng => { e.groups.push(ng); save(); App.refresh(); }) }, '+ Aggiungi righe di serie'));
@@ -1426,7 +1433,7 @@ function editExercise(src, after) {
 }
 
 // ============================================================ AVVIO
-const VERSION = '1.0.3';
+const VERSION = '1.0.4';
 function boot() {
   loadData();
   document.documentElement.dataset.theme = D.settings.theme;

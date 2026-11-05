@@ -353,6 +353,26 @@
     if (!total) return -1;
     return F.doneInWeek(d, p, prev) / total < 0.6 ? prev : -1;
   };
+  /** La stessa serie (stessa posizione) dell'ultimo allenamento con quell'esercizio. */
+  F.prevSet = (d, ex, setIdx, excludeSession) => F.lastLogs(d, ex, excludeSession).find(l => l.setIdx === setIdx) || null;
+  /** Confronto con la volta scorsa: dir 1 meglio, 0 uguale, -1 peggio; testo tipo "+2,5 kg · +1 rip". */
+  F.compareSet = function (cur, prev, formula) {
+    if (!cur || !prev) return null;
+    const timed = cur.sec > 0 && !cur.reps;
+    const parts = [];
+    const dk = Math.round((cur.kg - prev.kg) * 100) / 100;
+    if (Math.abs(dk) > 0.001) parts.push((dk > 0 ? '+' : '−') + F.kg(Math.abs(dk)) + ' kg');
+    const dr = timed ? cur.sec - prev.sec : cur.reps - prev.reps;
+    if (dr) parts.push((dr > 0 ? '+' : '−') + Math.abs(dr) + (timed ? ' s' : ' rip'));
+    let dir;
+    if (timed) dir = Math.sign(dr || dk);
+    else if (cur.reps <= 12 && prev.reps <= 12 && cur.kg > 0 && prev.kg > 0) {
+      const a = F.e1rm(cur.kg, cur.reps, 0, formula), b = F.e1rm(prev.kg, prev.reps, 0, formula);
+      dir = Math.abs(a - b) < 0.25 ? 0 : Math.sign(a - b);
+    } else dir = Math.sign(dk !== 0 ? dk : dr);
+    return { dir, text: parts.length ? parts.join(' · ') : 'come la volta scorsa' };
+  };
+  F.setText = l => l.sec > 0 && !l.reps ? l.sec + ' s' + (l.kg > 0 ? ' · ' + F.kg(l.kg) + ' kg' : '') : F.kg(l.kg) + ' kg × ' + l.reps;
   F.remap = (old, from, to) => old === from ? to : (from < to && old > from && old <= to) ? old - 1 : (from > to && old >= to && old < from) ? old + 1 : old;
   /** Sposta un esercizio nel giorno e riallinea le serie gia' registrate di quel giorno. */
   F.moveExercise = function (d, p, w, day, from, to) {
