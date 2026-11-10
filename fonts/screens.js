@@ -123,6 +123,40 @@ function howItWorks() {
 
 // ============================================================ ALLENAMENTO
 const drafts = {}, extras = {};
+/** Sposta un esercizio del giorno e riallinea serie registrate e valori non ancora salvati. */
+function moveInDay(p, w, day, from, to) {
+  F.moveExercise(D, p, w, day, from, to);
+  const live = F.session(D, D.liveSession);
+  if (!live || live.done || live.program !== p.id || live.week !== w || live.day !== day) return;
+  const pre = live.id + ':';
+  [drafts, extras].forEach(obj => {
+    const out = {};
+    Object.keys(obj).forEach(k => {
+      if (!k.startsWith(pre)) { out[k] = obj[k]; return; }
+      const rest = k.slice(pre.length).split(':');
+      rest[0] = String(F.remap(Number(rest[0]), from, to));
+      out[pre + rest.join(':')] = obj[k];
+    });
+    Object.keys(obj).forEach(k => delete obj[k]); Object.assign(obj, out);
+  });
+}
+/** Correggi o elimina una serie gia' registrata. */
+function editLog(l, title, after) {
+  const timed = l.sec > 0 && !l.reps;
+  const kg = input(l.kg > 0 ? F.kg(l.kg) : '', 'kg', true), reps = input(String(timed ? l.sec : l.reps), timed ? 'secondi' : 'ripetizioni', true), rpe = input(l.rpe > 0 ? F.kg(l.rpe) : '', 'es. 8', true);
+  reps.setAttribute('inputmode', 'numeric');
+  const close = modal(title, h('div', { class: 'col', style: 'gap:12px' }, h('div', { class: 'grid2' }, field(timed ? 'Peso (facoltativo)' : 'Peso (kg)', kg), field(timed ? 'Secondi' : 'Ripetizioni', reps)), timed ? null : field('RPE (facoltativo)', rpe)), [
+    { label: 'Elimina', kind: 'secondary', on: () => confirmBox('Eliminare questa serie?', "Verra' tolta dallo storico.", 'Elimina', () => { D.logs.splice(D.logs.indexOf(l), 1); save(); if (after) after(); }) },
+    { label: 'Salva', on: () => {
+      const k = F.parse(kg.value, -1), n = Math.round(F.parse(reps.value, 0));
+      if (k < 0 || k > 1000 || n <= 0) { toast('Controlla peso e ripetizioni'); return; }
+      l.kg = k; if (timed) l.sec = n; else l.reps = n;
+      const rv = F.parse(rpe.value, 0); l.rpe = rv > 0 ? Math.round(Math.min(10, rv) * 2) / 2 : 0;
+      if (!l.warmup && !timed) l.pr = F.checkPR(D, l);
+      save(); toast('Serie corretta'); if (after) after();
+    } }]);
+  return close;
+}
 class WorkoutScreen {
   constructor(sid) { this.sid = sid; this.focus = -1; this.warmOpen = false; }
   session() { return F.session(D, this.sid); }
@@ -186,7 +220,9 @@ class WorkoutScreen {
     else b.appendChild(btn('Termina allenamento', 'primary', () => this.finish(s, day, logs)));
     const nt = this.nextText(day, logs, fi);
     if (nt) b.appendChild(txt('tiny center', nt));
-    const list = h('div', { class: 'col', style: 'gap:2px' }, txt('over', 'Esercizi di oggi'));
+    b.appendChild(txt('over', 'Esercizi di oggi'));
+    if (day.exs.length > 1) b.appendChild(txt('hint', "Tieni premuto e trascina per cambiare l'ordine"));
+    const list = h('div', { class: 'col', style: 'gap:2px' });
     day.exs.forEach((x, i) => {
       const dn = this.doneSets(logs, i), tot = this.rowsFor(x, i, logs);
       list.appendChild(h('div', { class: 'row tap', style: 'padding:10px 12px;min-height:52px;border-radius:14px;' + (i === fi ? 'background:var(--surface2)' : ''), onclick: () => { this.focus = i; App.render(true); } },
@@ -195,6 +231,7 @@ class WorkoutScreen {
         dn >= tot ? h('span', { class: 'accent', style: 'width:20px;height:20px;display:flex' }, icon('check')) : txt('tiny bold', dn + '/' + tot)));
     });
     b.appendChild(list);
+    makeReorder(list, (from, to) => { const nf = F.remap(this.focus, from, to); moveInDay(p, s.week, s.day, from, to); this.focus = nf; save(); App.refresh(); });
     return b;
   }
 
@@ -266,6 +303,7 @@ class WorkoutScreen {
       g.kg > 0 ? tag(F.kg(g.kg) + ' kg') : null, tag('Rec ' + F.time(F.restFor(D.settings, e, g))), e.tempo ? tag('Tempo ' + e.tempo) : null));
     if (e.groups.length > 1) c.appendChild(txt('tiny', 'Piano: ' + F.target(e)));
     if (e.note) c.appendChild(txt('small', e.note));
+    if (g.note) c.appendChild(h('div', { class: 'notebox' }, txt('tiny bold accent', 'QUESTA SERIE'), g.note));
     if (e.approachNote) c.appendChild(h('div', { class: 'notebox' }, txt('tiny bold accent', 'AVVICINAMENTO'), e.approachNote));
     const myNote = this.exNote(s, e.name);
     if (myNote) c.appendChild(h('div', { class: 'notebox' }, 'Tua nota: ' + myNote));
@@ -322,16 +360,24 @@ class WorkoutScreen {
     const done = this.logFor(logs, i, k, false);
     const r = h('div', { class: 'setrow' + (current ? ' cur' : '') });
     r.appendChild(h('span', { class: 'n', style: 'color:' + (current ? 'var(--accentText)' : done ? 'var(--muted)' : 'var(--faint)') }, String(k + 1)));
+    const prev = F.prevSet(D, e.name, k, this.sid);
     if (done) {
-      ap(r, h('div', { class: 'grow' }, done.sec > 0 && done.reps === 0 ? done.sec + ' s' + (done.kg > 0 ? ' · ' + F.kg(done.kg) + ' kg' : '') : F.kg(done.kg) + ' kg × ' + done.reps),
+      const cmp = F.compareSet(done, prev, D.settings.formula);
+      const col = cmp ? (cmp.dir > 0 ? 'var(--accentText)' : cmp.dir < 0 ? 'var(--warn)' : 'var(--muted)') : '';
+      ap(r, h('div', { class: 'grow' }, F.setText(done),
+          cmp ? h('div', { class: 'tiny', style: 'font-weight:600;color:' + col }, (cmp.dir > 0 ? '↑ ' : cmp.dir < 0 ? '↓ ' : '= ') + cmp.text + ' (prima ' + F.setText(prev) + ')') : null),
         txt('tiny', done.rpe > 0 ? 'RPE ' + F.kg(done.rpe) : ''), done.pr ? h('span', { style: 'width:18px;height:18px;display:flex;color:var(--record)' }, icon('trophy')) : null,
         this.check(2, () => confirmBox('Annullare la serie ' + (k + 1) + '?', "La serie tornera' da fare.", 'Annulla serie', () => { D.logs.splice(D.logs.indexOf(done), 1); save(); App.refresh(); })));
+      r.classList.add('tap');
+      r.setAttribute('aria-label', 'Serie ' + (k + 1) + ' fatta: tocca per correggere');
+      r.addEventListener('click', () => editLog(done, e.name + ' · serie ' + (k + 1), () => App.refresh()));
       return r;
     }
     const rpe = this.draftRpe(i, k);
     const g = F.groupOf(e, k), proposed = current && drafts[this.key(i, k) + ':kg'] == null && !(g.kg > 0) && this.draftKg(e, i, k) > 0;
+    const sub = [proposed ? 'consigliato' : '', prev ? 'volta scorsa ' + F.setText(prev) : ''].filter(Boolean).join(' · ');
     ap(r, h('div', { class: 'grow', style: current ? 'font-weight:700' : 'color:var(--faint)' }, this.label(e, i, k),
-      proposed ? h('div', { class: 'tiny', style: 'font-weight:400' }, 'consigliato · tocca per cambiarlo') : null),
+      sub ? h('div', { class: 'tiny', style: 'font-weight:400' + (current ? '' : ';color:var(--faint)') }, sub) : null),
       txt('tiny', current ? (rpe > 0 ? 'RPE ' + F.kg(rpe) : 'RPE —') : ''),
       this.check(current ? 1 : 0, () => { const s = this.session(); const p = F.program(D, s.program); this.complete(s, F.day(p, s.week, s.day), i, k); }));
     r.classList.add('tap');
@@ -661,7 +707,10 @@ class DayScreen {
     if (day.note) b.appendChild(txt('small', day.note));
     if (day.warm.length) b.appendChild(card(h('div', { class: 'row' }, h('span', { class: 'accent', style: 'width:20px;height:20px;display:flex' }, icon('fire')), txt('h2 grow', 'Riscaldamento')),
       day.warm.map(w => h('div', null, txt('bold', w.name), w.detail ? txt('tiny', w.detail) : null))));
-    day.exs.forEach((e, i) => b.appendChild(this.exCard(p, day, e, i)));
+    const exBox = h('div', { class: 'col', style: 'gap:var(--gap,14px)' });
+    day.exs.forEach((e, i) => exBox.appendChild(this.exCard(p, day, e, i)));
+    if (day.exs.length > 1) { b.appendChild(txt('hint', "Tieni premuto un esercizio e trascinalo per cambiare l'ordine")); makeReorder(exBox, (from, to) => { moveInDay(p, this.w, this.d, from, to); save(); App.refresh(); }); }
+    b.appendChild(exBox);
     if (!day.exs.length) b.appendChild(emptyCard('dumbbell', 'Nessun esercizio', 'Tocca "Aggiungi esercizio" per comporre l\'allenamento.'));
     if (this.edit || !day.exs.length) b.appendChild(btn('+ Aggiungi esercizio', 'outline', () => pickExercise('Aggiungi esercizio', n => {
       const e = F.Ex(); e.name = n; const g = F.SetGroup(); g.sets = 3; g.reps = '8'; e.groups.push(g); day.exs.push(e); save(); this.edit = true; App.refresh();
@@ -683,12 +732,14 @@ class DayScreen {
       this.edit ? ibtn('more', 'Opzioni esercizio', () => this.exMenu(p, day, i), 'alt') : null));
     e.groups.forEach((g, k) => {
       const sg = F.suggest(D, e.name, g, null, e);
-      c.appendChild(h('div', { class: 'row', style: 'min-height:' + (this.edit ? 44 : 28) + 'px' }, h('div', { class: 'grow' }, F.targetGroup(g)),
+      c.appendChild(h('div', { class: 'row', style: 'min-height:' + (this.edit ? 44 : 28) + 'px' }, h('div', { class: 'grow' }, F.targetGroup(g), g.note ? txt('tiny', g.note) : null),
         !(g.kg > 0) && sg.kg > 0 ? h('div', { class: 'num accent', style: 'font-size:16px' }, F.kg(sg.kg) + ' kg') : null,
         this.edit ? ibtn('edit', 'Modifica serie', () => editGroup(e.name, g, ng => { e.groups[k] = ng; save(); App.refresh(); }), 'alt') : null,
         this.edit ? ibtn('trash', 'Elimina serie', () => { if (e.groups.length <= 1) { toast('Un esercizio deve avere almeno una riga di serie'); return; } e.groups.splice(k, 1); save(); App.refresh(); }, 'alt') : null));
     });
     c.appendChild(hscroll(tag('Recupero ' + F.time(F.restFor(D.settings, e, e.groups[0]))), e.tempo ? tag('Tempo ' + e.tempo) : null));
+    const last = F.lastLogs(D, e.name, D.liveSession || null).sort((a, b) => a.setIdx - b.setIdx);
+    if (last.length) c.appendChild(h('div', { class: 'small' }, h('b', null, 'Ultima volta (' + F.dm(last[0].ts) + '): '), last.map(F.setText).join(' · ')));
     if (e.note) c.appendChild(txt('small', e.note));
     if (e.approach.length || e.approachNote) c.appendChild(h('div', { class: 'tiny accent' }, 'Avvicinamento: ' + (e.approach.length ? e.approach.map(x => F.kg(x[0]) + '% × ' + x[1]).join(', ') + '. ' : '') + e.approachNote));
     if (this.edit) c.appendChild(h('button', { class: 'btn ghost', style: 'color:var(--accentText);justify-content:flex-start', onclick: () => editGroup(e.name, null, ng => { e.groups.push(ng); save(); App.refresh(); }) }, '+ Aggiungi righe di serie'));
@@ -1078,12 +1129,21 @@ class ExerciseScreen {
         if (n++ >= 15) return;
         ls.sort((x, y) => x.setIdx - y.setIdx);
         const s = F.session(D, sid);
-        hc.appendChild(h('div', null, txt('bold', F.dm(ls[0].ts) + (s && s.dayName ? ' · ' + s.dayName : '')), txt('tiny', ls.map(l => (l.sec > 0 && !l.reps ? l.sec + 's' : F.kg(l.kg) + '×' + l.reps) + (l.rpe > 0 ? ' @' + F.kg(l.rpe) : '')).join(', ') + ' · vol ' + F.big(F.volume(ls)) + ' kg')));
+        hc.appendChild(h('div', { class: 'tap', style: 'padding:4px 0', onclick: () => this.editSession(ls, s) }, txt('bold', F.dm(ls[0].ts) + (s && s.dayName ? ' · ' + s.dayName : '')), txt('tiny', ls.map(l => (l.sec > 0 && !l.reps ? l.sec + 's' : F.kg(l.kg) + '×' + l.reps) + (l.rpe > 0 ? ' @' + F.kg(l.rpe) : '')).join(', ') + ' · vol ' + F.big(F.volume(ls)) + ' kg')));
       });
       if (bySes.size > 15) hc.appendChild(txt('tiny', '… e altri ' + (bySes.size - 15) + ' allenamenti'));
+      hc.appendChild(txt('hint', 'Tocca un allenamento per correggere o eliminare le serie'));
       b.appendChild(hc);
     } else b.appendChild(txt('small', 'Nessuna serie registrata per questo esercizio.'));
     return b;
+  }
+  editSession(ls, s) {
+    let close;
+    const list = h('div', { class: 'col', style: 'gap:4px' }, ls.map(l => h('button', { class: 'row', style: 'width:100%;text-align:left;padding:12px 10px;border-radius:12px;background:var(--surface2);min-height:48px', onclick: () => { close(); editLog(l, this.name + ' · serie ' + (l.setIdx + 1), () => App.refresh()); } },
+      h('div', { class: 'num', style: 'font-size:17px;color:var(--muted);min-width:20px' }, String(l.setIdx + 1)),
+      h('div', { class: 'bold grow' }, l.sec > 0 && !l.reps ? l.sec + ' s' + (l.kg > 0 ? ' · ' + F.kg(l.kg) + ' kg' : '') : F.kg(l.kg) + ' kg × ' + l.reps),
+      txt('tiny', l.rpe > 0 ? 'RPE ' + F.kg(l.rpe) : ''), h('span', { class: 'accent', style: 'width:18px;height:18px;display:flex' }, icon('edit')))));
+    close = sheet(F.dm(ls[0].ts) + (s && s.dayName ? ' · ' + s.dayName : ''), list);
   }
   menu(e) {
     const hasMax = F.currentMax(D, this.name) > 0;
@@ -1374,7 +1434,7 @@ function editExercise(src, after) {
 }
 
 // ============================================================ AVVIO
-const VERSION = '1.0.2';
+const VERSION = '1.0.5';
 function boot() {
   loadData();
   document.documentElement.dataset.theme = D.settings.theme;
